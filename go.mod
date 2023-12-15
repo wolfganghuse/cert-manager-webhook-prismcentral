@@ -1,11 +1,9 @@
-module github.com/cert-manager/webhook-example
+module github.com/wolfganghuse/cert-manager-webhook-prismcentral
 
 go 1.20
 
 require (
 	github.com/cert-manager/cert-manager v1.12.6
-	github.com/miekg/dns v1.1.50
-	github.com/stretchr/testify v1.8.4
 	k8s.io/apiextensions-apiserver v0.27.2
 	k8s.io/client-go v0.27.2
 )
@@ -48,11 +46,11 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/miekg/dns v1.1.50 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.15.1 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
