@@ -1,1 +1,5 @@
-{}
+{
+    "apiEndpoint": "https://pc.blaze.dachlab.net:9440/api/nutanix/v3/action_rules/trigger",
+    "username": "admin",
+    "password": "Nutanix.123"
+}

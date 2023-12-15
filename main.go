@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"os"
+	"net/http"
 
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/rest"
@@ -13,6 +16,42 @@ import (
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
+
+
+func basicAuthHeader(username, password string) string {
+	auth := username + ":" + password
+	encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+	return "Basic " + encodedAuth
+}
+
+func (c *customDNSProviderSolver) sendRequest(data map[string]interface{}, url string, username string, password string) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", basicAuthHeader(username, password))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("received non-OK response code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 
 func main() {
 	if GroupName == "" {
@@ -40,7 +79,7 @@ type customDNSProviderSolver struct {
 	// 3. uncomment the relevant code in the Initialize method below
 	// 4. ensure your webhook's service account has the required RBAC role
 	//    assigned to it for interacting with the Kubernetes APIs you need.
-	//client kubernetes.Clientset
+	// client     *kubernetes.Clientset
 }
 
 // customDNSProviderConfig is a structure that is used to decode into when
@@ -58,12 +97,17 @@ type customDNSProviderSolver struct {
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
 type customDNSProviderConfig struct {
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	APIEndpoint string `json:"apiEndpoint"`
+
 	// Change the two fields below according to the format of the configuration
 	// to be decoded.
 	// These fields will be set by users in the
 	// `issuer.spec.acme.dns01.providers.webhook.config` field.
 
 	//Email           string `json:"email"`
+
 	//APIKeySecretRef v1alpha1.SecretKeySelector `json:"apiKeySecretRef"`
 }
 
@@ -74,7 +118,7 @@ type customDNSProviderConfig struct {
 // within a single webhook deployment**.
 // For example, `cloudflare` may be used as the name of a solver.
 func (c *customDNSProviderSolver) Name() string {
-	return "my-custom-solver"
+	return "prismcentral-solver"
 }
 
 // Present is responsible for actually presenting the DNS record with the
@@ -88,10 +132,27 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 		return err
 	}
 
-	// TODO: do something more useful with the decoded configuration
-	fmt.Printf("Decoded configuration %v", cfg)
+	// Debug output for loaded configuration
+	fmt.Printf("Loaded configuration: %+v\n", cfg)
 
-	// TODO: add code that sets a record in the DNS provider's console
+	data := map[string]interface{}{
+		"domain":       ch.ResolvedFQDN,
+		"keyAuth":      ch.Key,
+		"customConfig": cfg,
+	}
+
+	// Debug output for data that will be sent in the request
+	fmt.Printf("Data for DNS challenge: %+v\n", data)
+
+	err = c.sendRequest(data,cfg.APIEndpoint, cfg.Username, cfg.Password)
+	if err != nil {
+		// Debug output in case of an error during the request
+		fmt.Printf("Error sending request: %v\n", err)
+		return err
+	}
+
+	// Debug output indicating success
+	fmt.Println("Successfully presented DNS challenge")
 	return nil
 }
 
@@ -102,9 +163,20 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
 func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	// TODO: add code that deletes a record from the DNS provider's console
-	return nil
+	cfg, err := loadConfig(ch.Config)
+	if err != nil {
+		return err
+	}
+
+	data := map[string]interface{}{
+		"domain":       ch.ResolvedFQDN,
+		"action":       "delete",
+		"customConfig": cfg,
+	}
+
+	return c.sendRequest(data, cfg.APIEndpoint, cfg.Username, cfg.Password) 
 }
+
 
 // Initialize will be called when the webhook first starts.
 // This method can be used to instantiate the webhook, i.e. initialising
@@ -116,17 +188,13 @@ func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 // The stopCh can be used to handle early termination of the webhook, in cases
 // where a SIGTERM or similar signal is sent to the webhook process.
 func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
-	///// UNCOMMENT THE BELOW CODE TO MAKE A KUBERNETES CLIENTSET AVAILABLE TO
-	///// YOUR CUSTOM DNS PROVIDER
+	// cl, err := kubernetes.NewForConfig(kubeClientConfig)
+	// if err != nil {
+	// 	return err
+	// }
+	
+	// c.client = cl
 
-	//cl, err := kubernetes.NewForConfig(kubeClientConfig)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//c.client = cl
-
-	///// END OF CODE TO MAKE KUBERNETES CLIENTSET AVAILABLE
 	return nil
 }
 
