@@ -1,5 +1,6 @@
 {
     "apiEndpoint": "https://pc.blaze.dachlab.net:9440/api/nutanix/v3/action_rules/trigger",
     "username": "admin",
-    "password": "Nutanix.123"
+    "password": "Nutanix.123",
+    "webhookID": "90836c84-38ce-456e-b595-7bdab0bdffb3"
 }

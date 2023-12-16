@@ -6,7 +6,6 @@ import (
 
 	acmetest "github.com/cert-manager/cert-manager/test/acme"
 
-	"github.com/wolfganghuse/cert-manager-webhook-prismcentral"
 )
 
 var (
@@ -20,11 +19,11 @@ func TestRunsSuite(t *testing.T) {
 	//
 
 	// Uncomment the below fixture when implementing your custom DNS provider
-	fixture := acmetest.NewFixture(&customDNSProviderSolver{},
+	fixture := acmetest.NewFixture(&PrismCentralWebhookProviderSolver{},
 		acmetest.SetResolvedZone(zone),
 		acmetest.SetAllowAmbientCredentials(false),
 		acmetest.SetManifestPath("testdata/my-custom-solver"),
-		acmetest.SetBinariesPath("_test/kubebuilder/bin"),
+		//acmetest.SetBinariesPath("_test/kubebuilder/bin"),
 	)
 	// solver := example.New("59351")
 	// fixture := acmetest.NewFixture(solver,

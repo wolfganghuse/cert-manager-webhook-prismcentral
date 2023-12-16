@@ -17,6 +17,18 @@ import (
 
 var GroupName = os.Getenv("GROUP_NAME")
 
+type TriggerInstance struct {
+    WebhookID string `json:"webhook_id"`
+    String1   string `json:"string1"`
+    String2   string `json:"string2"`
+    String3   string `json:"string3"`
+    String4   string `json:"string4"`
+}
+
+type TriggerData struct {
+    TriggerType         string            `json:"trigger_type"`
+    TriggerInstanceList []TriggerInstance `json:"trigger_instance_list"`
+}
 
 func basicAuthHeader(username, password string) string {
 	auth := username + ":" + password
@@ -24,13 +36,9 @@ func basicAuthHeader(username, password string) string {
 	return "Basic " + encodedAuth
 }
 
-func (c *customDNSProviderSolver) sendRequest(data map[string]interface{}, url string, username string, password string) error {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("error marshaling JSON: %v", err)
-	}
+func (c *PrismCentralWebhookProviderSolver) sendRequest(data []byte, url string, username string, password string) error {
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("error creating request: %v", err)
 	}
@@ -64,15 +72,15 @@ func main() {
 	// webhook, where the Name() method will be used to disambiguate between
 	// the different implementations.
 	cmd.RunWebhookServer(GroupName,
-		&customDNSProviderSolver{},
+		&PrismCentralWebhookProviderSolver{},
 	)
 }
 
-// customDNSProviderSolver implements the provider-specific logic needed to
+// PrismCentralWebhookProviderSolver implements the provider-specific logic needed to
 // 'present' an ACME challenge TXT record for your own DNS provider.
 // To do so, it must implement the `github.com/cert-manager/cert-manager/pkg/acme/webhook.Solver`
 // interface.
-type customDNSProviderSolver struct {
+type PrismCentralWebhookProviderSolver struct {
 	// If a Kubernetes 'clientset' is needed, you must:
 	// 1. uncomment the additional `client` field in this structure below
 	// 2. uncomment the "k8s.io/client-go/kubernetes" import at the top of the file
@@ -96,10 +104,14 @@ type customDNSProviderSolver struct {
 // You should not include sensitive information here. If credentials need to
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
+
+
+
 type customDNSProviderConfig struct {
 	Username   string `json:"username"`
 	Password   string `json:"password"`
 	APIEndpoint string `json:"apiEndpoint"`
+	WebhookID string `json:"webhookID"`
 
 	// Change the two fields below according to the format of the configuration
 	// to be decoded.
@@ -117,7 +129,7 @@ type customDNSProviderConfig struct {
 // solvers configured with the same Name() **so long as they do not co-exist
 // within a single webhook deployment**.
 // For example, `cloudflare` may be used as the name of a solver.
-func (c *customDNSProviderSolver) Name() string {
+func (c *PrismCentralWebhookProviderSolver) Name() string {
 	return "prismcentral-solver"
 }
 
@@ -126,7 +138,7 @@ func (c *customDNSProviderSolver) Name() string {
 // This method should tolerate being called multiple times with the same value.
 // cert-manager itself will later perform a self check to ensure that the
 // solver has correctly configured the DNS provider.
-func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
+func (c *PrismCentralWebhookProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return err
@@ -135,16 +147,30 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 	// Debug output for loaded configuration
 	fmt.Printf("Loaded configuration: %+v\n", cfg)
 
-	data := map[string]interface{}{
-		"domain":       ch.ResolvedFQDN,
-		"keyAuth":      ch.Key,
-		"customConfig": cfg,
+    triggerData := TriggerData{
+        TriggerType: "incoming_webhook_trigger",
+        TriggerInstanceList: []TriggerInstance{
+            {
+                WebhookID: cfg.WebhookID,
+                String1:   "Add",
+                String2:   ch.Key,
+                String3:   ch.ResolvedFQDN,
+                String4:   ch.ResolvedZone,
+            },
+        },
+    }
+
+
+	// Marshal webhookConfig to JSON for the request body
+	jsonData, err := json.Marshal(triggerData)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %v", err)
 	}
 
 	// Debug output for data that will be sent in the request
-	fmt.Printf("Data for DNS challenge: %+v\n", data)
+	fmt.Printf("Data for DNS challenge: %+v\n", string(jsonData))
 
-	err = c.sendRequest(data,cfg.APIEndpoint, cfg.Username, cfg.Password)
+	err = c.sendRequest(jsonData,cfg.APIEndpoint, cfg.Username, cfg.Password)
 	if err != nil {
 		// Debug output in case of an error during the request
 		fmt.Printf("Error sending request: %v\n", err)
@@ -162,19 +188,35 @@ func (c *customDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
 // value provided on the ChallengeRequest should be cleaned up.
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
-func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
+func (c *PrismCentralWebhookProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 	cfg, err := loadConfig(ch.Config)
 	if err != nil {
 		return err
 	}
 
-	data := map[string]interface{}{
-		"domain":       ch.ResolvedFQDN,
-		"action":       "delete",
-		"customConfig": cfg,
+    triggerData := TriggerData{
+        TriggerType: "incoming_webhook_trigger",
+        TriggerInstanceList: []TriggerInstance{
+            {
+                WebhookID: "90836c84-38ce-456e-b595-7bdab0bdffb3",
+                String1:   "Add",
+                String2:   ch.Key,
+                String3:   ch.ResolvedFQDN,
+                String4:   ch.ResolvedZone,
+            },
+        },
+    }
+
+	// Marshal webhookConfig to JSON for the request body
+	jsonData, err := json.Marshal(triggerData)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %v", err)
 	}
 
-	return c.sendRequest(data, cfg.APIEndpoint, cfg.Username, cfg.Password) 
+	// Debug output for data that will be sent in the request
+	fmt.Printf("Data for DNS challenge: %+v\n", string(jsonData))
+
+	return c.sendRequest(jsonData, cfg.APIEndpoint, cfg.Username, cfg.Password) 
 }
 
 
@@ -187,7 +229,7 @@ func (c *customDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
 // provider accounts.
 // The stopCh can be used to handle early termination of the webhook, in cases
 // where a SIGTERM or similar signal is sent to the webhook process.
-func (c *customDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+func (c *PrismCentralWebhookProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
 	// cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	// if err != nil {
 	// 	return err

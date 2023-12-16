@@ -13,7 +13,7 @@ certManager:
   serviceAccountName: cert-manager
 
 image:
-  repository: mycompany/webhook-image
+  repository: quay.io/wolfgangntnx/cert-manager-webhook-prismcentral
   tag: latest
   pullPolicy: IfNotPresent
 
